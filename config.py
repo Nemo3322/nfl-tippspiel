@@ -77,7 +77,7 @@ TEAM_LOGOS = {
 CONF_LOGOS = {
     "AFC": "https://a.espncdn.com/i/teamlogos/nfl/500/afc.png",
     "NFC": "https://a.espncdn.com/i/teamlogos/nfl/500/nfc.png",
-    "NFL": "https://a.espncdn.com/i/teamlogos/nfl/500/nfl.png"
+    "NFL": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a2/National_Football_League_logo.svg/500px-National_Football_League_logo.svg.png"
 }
 
 # --- PUNKTESYSTEM REGELN ---
