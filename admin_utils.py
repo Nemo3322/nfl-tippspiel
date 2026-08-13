@@ -142,3 +142,15 @@ def render_admin_page():
                     del st.session_state[key]
 
             st.rerun()
+
+    st.markdown("---")
+        st.subheader("📁 Gespeicherte Tipp-Dateien ansehen")
+    
+    # Alle .json-Dateien auf dem Server finden
+        json_files = [f for f in os.listdir(".") if f.endswith(".json")]
+    
+        selected_file = st.selectbox("Wähle eine Datei zum Ansehen:", options=json_files)
+        if selected_file:
+            with open(selected_file, "r") as f:
+                data = json.load(f)
+            st.json(data)  # Zeigt den Inhalt sauber formatiert im Browser an!
