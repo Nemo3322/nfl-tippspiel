@@ -104,7 +104,6 @@ def render_admin_page():
     # AKTION-BUTTONS: SPEICHERN & ZURÜCKSETZEN
     btn_col1, btn_col2 = st.columns([1, 1])
 
-    # BUTTON 1: SPEICHERN
     with btn_col1:
         if st.button("Offizielle Ergebnisse speichern 💾", type="primary", use_container_width=True):
             results_to_save = {}
@@ -129,28 +128,28 @@ def render_admin_page():
 
             st.success("✅ Offizielle Ergebnisse wurden erfolgreich gespeichert! Die Rangliste ist nun aktualisiert.")
 
-    # BUTTON 2: LÖSCHEN / ZURÜCKSETZEN
     with btn_col2:
         if st.button("Offizielle Ergebnisse zurücksetzen 🗑️", type="secondary", use_container_width=True):
-            # 1. Datei löschen
             if os.path.exists(OFFICIAL_RESULTS_FILE):
                 os.remove(OFFICIAL_RESULTS_FILE)
 
-            # 2. Session State aufräumen
             for key in list(st.session_state.keys()):
                 if key.startswith("admin_"):
                     del st.session_state[key]
 
             st.rerun()
 
+    # DATEI-INSPECTOR (Gespeicherte .json Dateien ansehen)
     st.markdown("---")
-        st.subheader("📁 Gespeicherte Tipp-Dateien ansehen")
+    st.subheader("📁 Gespeicherte Tipp-Dateien ansehen")
     
-    # Alle .json-Dateien auf dem Server finden
-        json_files = [f for f in os.listdir(".") if f.endswith(".json")]
-    
+    json_files = [f for f in os.listdir(".") if f.endswith(".json")]
+    if json_files:
         selected_file = st.selectbox("Wähle eine Datei zum Ansehen:", options=json_files)
         if selected_file:
             with open(selected_file, "r") as f:
-                data = json.load(f)
-            st.json(data)  # Zeigt den Inhalt sauber formatiert im Browser an!
+                try:
+                    data = json.load(f)
+                    st.json(data)
+                except Exception:
+                    st.error("Datei konnte nicht gelesen werden.")
