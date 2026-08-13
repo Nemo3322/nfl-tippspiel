@@ -139,16 +139,31 @@ def render_admin_page():
 
             st.rerun()
 
-    # DATEI-INSPECTOR (Gespeicherte .json Dateien ansehen)
+    # DATEI-INSPECTOR (Gespeicherte .json Dateien ansehen & herunterladen)
     st.markdown("---")
-    st.subheader("📁 Gespeicherte Tipp-Dateien ansehen")
+    st.subheader("📁 Gespeicherte Tipp-Dateien ansehen & herunterladen")
     
     json_files = [f for f in os.listdir(".") if f.endswith(".json")]
     if json_files:
-        selected_file = st.selectbox("Wähle eine Datei zum Ansehen:", options=json_files)
+        selected_file = st.selectbox("Wähle eine Datei zum Ansehen/Herunterladen:", options=json_files)
         if selected_file:
             with open(selected_file, "r") as f:
                 try:
+                    file_content = f.read()
+                    data = json.loads(file_content)
+                    
+                    # Button zum Herunterladen der JSON-Datei
+                    st.download_button(
+                        label=f"📥 {selected_file} herunterladen",
+                        data=file_content,
+                        file_name=selected_file,
+                        mime="application/json"
+                    )
+                    
+                    # Vorschau im Browser
+                    st.json(data)
+                except Exception:
+                    st.error("Datei konnte nicht gelesen werden.")
                     data = json.load(f)
                     st.json(data)
                 except Exception:
