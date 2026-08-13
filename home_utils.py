@@ -11,7 +11,7 @@ def render_home_page():
     # Status-Karte (Anzeigen, ob die Tipps offen oder geschlossen sind)
     col_status1, col_status2 = st.columns([1, 3])
     with col_status1:
-        st.image(CONF_LOGOS.get("NFL"), width=50)
+        st.image(CONF_LOGOS.get("NFL"), width=20)
     with col_status2:
         if is_locked():
             st.error(f"🔒 **Status: Tippabgabe geschlossen**\n\nDie Abgabefrist ist seit dem **{LOCK_DEADLINE.strftime('%d.%m.%Y um %H:%M Uhr')}** abgelaufen.")
