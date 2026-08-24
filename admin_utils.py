@@ -1,19 +1,12 @@
 import streamlit as st
-import json
-import os
-from config import EMPTY_OPTION, AFC_DIVISIONS, NFC_DIVISIONS, OFFICIAL_RESULTS_FILE
+from config import EMPTY_OPTION, AFC_DIVISIONS, NFC_DIVISIONS
+from db_utils import load_data, save_data
 
 def render_admin_page():
     st.header("⚙️ Admin-Bereich: Offizielle Saison-Ergebnisse eintragen")
     st.write("Trage hier die echten Endergebnisse der Saison ein, um die Rangliste zu berechnen.")
 
-    saved_results = {}
-    if os.path.exists(OFFICIAL_RESULTS_FILE):
-        with open(OFFICIAL_RESULTS_FILE, "r") as f:
-            try:
-                saved_results = json.load(f)
-            except Exception:
-                saved_results = {}
+    saved_results = load_data("official_results")
 
     # 1. DIVISIONS
     st.subheader("1. Echte Divisions-Endergebnisse")
@@ -72,7 +65,6 @@ def render_admin_page():
 
         col_exit_a, col_exit_n = st.columns(2)
 
-        # AFC Verlierer
         with col_exit_a:
             st.markdown("**AFC Playoff-Teams**")
             for team in afc_playoff_teams:
@@ -80,7 +72,6 @@ def render_admin_page():
                 idx_r = rounds_options.index(curr_exit) if curr_exit in rounds_options else 0
                 admin_exits[team] = st.selectbox(f"Aus für **{team}** in:", options=rounds_options, index=idx_r, key=f"admin_exit_{team}")
 
-        # NFC Verlierer
         with col_exit_n:
             st.markdown("**NFC Playoff-Teams**")
             for team in nfc_playoff_teams:
@@ -101,70 +92,43 @@ def render_admin_page():
 
     st.markdown("---")
     
-    # AKTION-BUTTONS: SPEICHERN & ZURÜCKSETZEN
     btn_col1, btn_col2 = st.columns([1, 1])
 
     with btn_col1:
         if st.button("Offizielle Ergebnisse speichern 💾", type="primary", use_container_width=True):
             results_to_save = {}
 
-            # Divisions speichern
             for div_key in all_divisions.keys():
                 results_to_save[div_key] = [st.session_state.get(f"admin_{div_key}_pos_{p}") for p in range(1, 5)]
 
-            # Seeds speichern
             for conf in ["afc", "nfc"]:
                 results_to_save[f"{conf}_seeds"] = {str(p): st.session_state.get(f"admin_{conf}_seed_{p}") for p in range(1, 8)}
 
-            # Playoff Exits speichern
             if all_playoff_teams:
                 results_to_save["playoff_exits"] = {team: r for team, r in admin_exits.items() if r != EMPTY_OPTION}
 
-            # Super Bowl Sieger
             results_to_save["super_bowl_winner"] = actual_sb_winner
 
-            with open(OFFICIAL_RESULTS_FILE, "w") as f:
-                json.dump(results_to_save, f)
-
-            st.success("✅ Offizielle Ergebnisse wurden erfolgreich gespeichert! Die Rangliste ist nun aktualisiert.")
+            save_data("official_results", results_to_save)
+            st.success("✅ Offizielle Ergebnisse wurden in Google Sheets gespeichert! Die Rangliste ist nun aktualisiert.")
 
     with btn_col2:
         if st.button("Offizielle Ergebnisse zurücksetzen 🗑️", type="secondary", use_container_width=True):
-            if os.path.exists(OFFICIAL_RESULTS_FILE):
-                os.remove(OFFICIAL_RESULTS_FILE)
-
+            save_data("official_results", {})
             for key in list(st.session_state.keys()):
                 if key.startswith("admin_"):
                     del st.session_state[key]
-
             st.rerun()
 
-    # DATEI-INSPECTOR (Gespeicherte .json Dateien ansehen & herunterladen)
+    # DATEI-INSPECTOR (Zeigt direkt den Inhalt aus Google Sheets an)
     st.markdown("---")
-    st.subheader("📁 Gespeicherte Tipp-Dateien ansehen & herunterladen")
-    
-    json_files = [f for f in os.listdir(".") if f.endswith(".json")]
-    if json_files:
-        selected_file = st.selectbox("Wähle eine Datei zum Ansehen/Herunterladen:", options=json_files)
-        if selected_file:
-            with open(selected_file, "r") as f:
-                try:
-                    file_content = f.read()
-                    data = json.loads(file_content)
-                    
-                    # Button zum Herunterladen der JSON-Datei
-                    st.download_button(
-                        label=f"📥 {selected_file} herunterladen",
-                        data=file_content,
-                        file_name=selected_file,
-                        mime="application/json"
-                    )
-                    
-                    # Vorschau im Browser
-                    st.json(data)
-                except Exception:
-                    st.error("Datei konnte nicht gelesen werden.")
-                    data = json.load(f)
-                    st.json(data)
-                except Exception:
-                    st.error("Datei konnte nicht gelesen werden.")
+    st.subheader("📁 Gespeicherte Daten in Google Sheets ansehen")
+    from config import USERS
+    keys_to_inspect = ["official_results"] + [f"tipp_{u}" for u in USERS.keys()]
+    selected_key = st.selectbox("Wähle einen Datensatz zum Ansehen:", options=keys_to_inspect)
+    if selected_key:
+        data = load_data(selected_key)
+        if data:
+            st.json(data)
+        else:
+            st.info("Noch keine Daten für diesen Eintrag vorhanden.")
