@@ -1,11 +1,10 @@
 import streamlit as st
-import json
-import os
 from config import USERS, EMPTY_OPTION, AFC_DIVISIONS, NFC_DIVISIONS, TEAM_LOGOS, CONF_LOGOS, LOCK_DEADLINE, is_locked
 from playoff_utils import render_playoff_page
 from ranking_utils import render_leaderboard_page, render_points_system_page
 from admin_utils import render_admin_page
 from home_utils import render_home_page
+from db_utils import load_data, save_data
 
 # Seitenkonfiguration
 st.set_page_config(page_title="NFL Prediction", page_icon="🏈")
@@ -15,7 +14,7 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
-def render_division_tipps(conference_name, divisions_dict, user_file):
+def render_division_tipps(conference_name, divisions_dict, username):
     col_h1, col_h2 = st.columns([1, 10])
     with col_h1:
         st.image(CONF_LOGOS.get(conference_name), width=55)
@@ -28,13 +27,8 @@ def render_division_tipps(conference_name, divisions_dict, user_file):
     else:
         st.write("Wähle für jede Division die Teams für die fixen Platzierungen 1–4.")
 
-    saved_data = {}
-    if os.path.exists(user_file):
-        with open(user_file, "r") as f:
-            try:
-                saved_data = json.load(f)
-            except Exception:
-                saved_data = {}
+    user_key = f"tipp_{username}"
+    saved_data = load_data(user_key)
 
     for div_key, teams in divisions_dict.items():
         st.subheader(div_key.replace("_", " ").upper())
@@ -92,24 +86,15 @@ def render_division_tipps(conference_name, divisions_dict, user_file):
                 for div_key in divisions_dict.keys():
                     saved_data[div_key] = [st.session_state.get(f"{div_key}_pos_{p}") for p in range(1, 5)]
 
-                with open(user_file, "w") as f:
-                    json.dump(saved_data, f)
-                st.success(f"Deine {conference_name}-Tipps wurden erfolgreich gespeichert!")
+                save_data(user_key, saved_data)
+                st.success(f"Deine {conference_name}-Tipps wurden erfolgreich in Google Sheets gespeichert!")
 
     with btn_col2:
         if st.button(f"{conference_name}-Tipps zurücksetzen 🗑️", type="secondary", use_container_width=True, disabled=locked):
-            if os.path.exists(user_file):
-                with open(user_file, "r") as f:
-                    try:
-                        file_data = json.load(f)
-                    except Exception:
-                        file_data = {}
-                
-                for div_key in divisions_dict.keys():
-                    file_data.pop(div_key, None)
+            for div_key in divisions_dict.keys():
+                saved_data.pop(div_key, None)
 
-                with open(user_file, "w") as f:
-                    json.dump(file_data, f)
+            save_data(user_key, saved_data)
 
             for div_key in divisions_dict.keys():
                 for pos in range(1, 5):
@@ -142,26 +127,25 @@ else:
         st.session_state["username"] = ""
         st.rerun()
 
-    
     # Menüoptionen (Admin-Menü nur für den User 'mirco')
     nav_options = ["Home", "AFC Tipps", "NFC Tipps", "Playoffs", "Rangliste", "Punktesystem"]
     if st.session_state["username"] == "mirco":
         nav_options.append("⚙️ Admin (Ergebnisse)")
 
     page = st.sidebar.radio("Navigation", nav_options)
-    user_file = f"tipp_{st.session_state['username']}.json"
+    curr_user = st.session_state["username"]
 
     if page == "Home":
         render_home_page()
 
     elif page == "AFC Tipps":
-        render_division_tipps("AFC", AFC_DIVISIONS, user_file)
+        render_division_tipps("AFC", AFC_DIVISIONS, curr_user)
 
     elif page == "NFC Tipps":
-        render_division_tipps("NFC", NFC_DIVISIONS, user_file)
+        render_division_tipps("NFC", NFC_DIVISIONS, curr_user)
 
     elif page == "Playoffs":
-        render_playoff_page(user_file)
+        render_playoff_page(curr_user)
 
     elif page == "Rangliste":
         render_leaderboard_page()
