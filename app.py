@@ -87,7 +87,7 @@ def render_division_tipps(conference_name, divisions_dict, username):
                     saved_data[div_key] = [st.session_state.get(f"{div_key}_pos_{p}") for p in range(1, 5)]
 
                 save_data(user_key, saved_data)
-                st.success(f"Deine {conference_name}-Tipps wurden erfolgreich in Google Sheets gespeichert!")
+                st.success(f"Deine {conference_name}-Tipps wurden erfolgreich gespeichert!")
 
     with btn_col2:
         if st.button(f"{conference_name}-Tipps zurücksetzen 🗑️", type="secondary", use_container_width=True, disabled=locked):
