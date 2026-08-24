@@ -209,7 +209,7 @@ def render_playoff_page(username):
                 
                 save_data(user_key, saved_data)
                 st.balloons()
-                st.success(f"Dein Tipp wurde dauerhaft in Google Sheets gespeichert! Super Bowl Champion: {super_bowl_champ}")
+                st.success(f"Dein Tipp wurde erfolgreich gespeichert! Super Bowl Champion: {super_bowl_champ}")
 
         with btn_col2:
             if is_locked():
