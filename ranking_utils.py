@@ -1,19 +1,13 @@
 import streamlit as st
-import json
-import os
 import pandas as pd
-from config import USERS, OFFICIAL_RESULTS_FILE, POINTS_CONFIG, AFC_DIVISIONS, NFC_DIVISIONS, HALL_OF_FAME
+from config import USERS, POINTS_CONFIG, AFC_DIVISIONS, NFC_DIVISIONS, HALL_OF_FAME
+from db_utils import load_data
 
-def calculate_user_points(user_file, official_file):
-    if not os.path.exists(user_file) or not os.path.exists(official_file):
-        return 0, {}
+def calculate_user_points(username):
+    user_data = load_data(f"tipp_{username}")
+    official_data = load_data("official_results")
 
-    try:
-        with open(user_file, "r") as f:
-            user_data = json.load(f)
-        with open(official_file, "r") as f:
-            official_data = json.load(f)
-    except Exception:
+    if not user_data or not official_data:
         return 0, {}
 
     score_details = {
@@ -24,7 +18,7 @@ def calculate_user_points(user_file, official_file):
         "sb_pts": 0
     }
 
-    # 1. Division-Platzierungen (2 Pkt pro exakter Treffer)
+    # 1. Division-Platzierungen (2 Pkt)
     all_divs = list(AFC_DIVISIONS.keys()) + list(NFC_DIVISIONS.keys())
     for div_key in all_divs:
         u_div = user_data.get(div_key, [])
@@ -42,21 +36,18 @@ def calculate_user_points(user_file, official_file):
         if isinstance(u_seeds, dict) and isinstance(o_seeds, dict):
             u_teams = {str(k): v for k, v in u_seeds.items()}
             o_teams = {str(k): v for k, v in o_seeds.items()}
-
             o_teams_set = set(o_teams.values())
 
             for pos_key, u_team in u_teams.items():
                 if u_team != "-- Bitte wählen --":
                     if u_team in o_teams_set:
                         score_details["qualifier_pts"] += POINTS_CONFIG["PLAYOFF_QUALIFIER"]
-
                     if o_teams.get(pos_key) == u_team:
                         score_details["seed_pts"] += POINTS_CONFIG["EXACT_SEED_POS"]
 
-    # 3. Exakter Playoff-Ausstieg (15 Pkt pro richtigem Team/Runde)
+    # 3. Exakter Playoff-Ausstieg (15 Pkt)
     u_exits = user_data.get("playoff_exits", {})
     o_exits = official_data.get("playoff_exits", {})
-    
     if isinstance(u_exits, dict) and isinstance(o_exits, dict):
         for team, user_exit_round in u_exits.items():
             if team != "-- Bitte wählen --" and team in o_exits:
@@ -78,17 +69,14 @@ def render_leaderboard_page():
 
     tab1, tab2 = st.tabs(["📊 Aktuelle Saison", "🏛️ Hall of Fame (Historie)"])
 
-    # TAB 1: AKTUELLE RANGLISTE
     with tab1:
-        if not os.path.exists(OFFICIAL_RESULTS_FILE):
-            st.info("ℹ️ Die Saison-Ergebnisse wurden noch nicht vom Admin eingetragen. Sobald der Admin die ersten Ergebnisse unter '⚙️ Admin (Ergebnisse)' speichert, erscheint hier die Punkteübersicht!")
+        official_data = load_data("official_results")
+        if not official_data:
+            st.info("ℹ️ Die Saison-Ergebnisse wurden noch nicht vom Admin eingetragen. Sobald der Admin die ersten Ergebnisse speichert, erscheint hier die Punkteübersicht!")
         else:
             leaderboard_data = []
-
             for username in USERS.keys():
-                user_file = f"tipp_{username}.json"
-                total_score, details = calculate_user_points(user_file, OFFICIAL_RESULTS_FILE)
-                
+                total_score, details = calculate_user_points(username)
                 leaderboard_data.append({
                     "Spieler": username.capitalize(),
                     "Gesamtpunkte": total_score,
@@ -115,11 +103,9 @@ def render_leaderboard_page():
 
             st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # TAB 2: HALL OF FAME
     with tab2:
         st.subheader("🏛️ Die bisherigen Champions")
-        st.write("Ewige Siegerliste der vergangen Tippspiel-Jahre:")
-
+        st.write("Ewige Siegerliste der vergangenen Tippspiel-Jahre:")
         df_hof = pd.DataFrame(HALL_OF_FAME)
         st.dataframe(df_hof, use_container_width=True, hide_index=True)
 
