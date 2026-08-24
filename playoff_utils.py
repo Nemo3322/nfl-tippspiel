@@ -1,7 +1,6 @@
 import streamlit as st
-import json
-import os
 from config import EMPTY_OPTION, AFC_DIVISIONS, NFC_DIVISIONS, TEAM_LOGOS, CONF_LOGOS, LOCK_DEADLINE, is_locked
+from db_utils import load_data, save_data
 
 def render_seed_selection(conf_name, divisions_dict, saved_data):
     col_title1, col_title2 = st.columns([1, 5])
@@ -61,19 +60,14 @@ def safe_radio(label, options, key_name):
     return st.radio(label, options=options, index=idx_val, key=key_name, disabled=is_locked())
 
 
-def render_playoff_page(user_file):
+def render_playoff_page(username):
     st.header("🏈 NFL Playoff Bracket")
 
     if is_locked():
         st.error(f"🔒 Das Playoff-Bracket ist seit dem {LOCK_DEADLINE.strftime('%d.%m.%Y um %H:%M Uhr')} gesperrt!")
 
-    saved_data = {}
-    if os.path.exists(user_file):
-        with open(user_file, "r") as f:
-            try:
-                saved_data = json.load(f)
-            except Exception:
-                saved_data = {}
+    user_key = f"tipp_{username}"
+    saved_data = load_data(user_key)
 
     all_afc_done = all(k in saved_data and isinstance(saved_data[k], list) and len(saved_data[k]) == 4 for k in AFC_DIVISIONS.keys())
     all_nfc_done = all(k in saved_data and isinstance(saved_data[k], list) and len(saved_data[k]) == 4 for k in NFC_DIVISIONS.keys())
@@ -111,7 +105,6 @@ def render_playoff_page(user_file):
         with b_col2:
             st.subheader(conf_title)
 
-        # Zuordnung: Team Name -> Seed Numme (für einfaches Re-Seeding)
         team_to_seed = {team: seed_num for seed_num, team in seeds.items()}
 
         col_wc, col_div, col_conf = st.columns([1, 1, 1])
@@ -123,16 +116,10 @@ def render_playoff_page(user_file):
             wc3_winner = safe_radio(f"Match 3: #4 ({seeds[4]}) vs #5 ({seeds[5]})", [seeds[4], seeds[5]], f"{conf_title}_wc3")
 
         # --- RE-SEEDING LOGIK FÜR DIVISIONAL ROUND ---
-        # 1. Sammle die 3 Wildcard Sieger
         wc_winners = [wc1_winner, wc2_winner, wc3_winner]
-        
-        # 2. Sortiere die Sieger nach ihrer Seed-Nummer aufsteigend (z.B. Seed 2, Seed 3, Seed 5)
         wc_winners_sorted = sorted(wc_winners, key=lambda team: team_to_seed.get(team, 99))
 
-        # Der schlechteste Verbliebene (höchster Seed) spielt gegen #1
         lowest_remaining_seed_team = wc_winners_sorted[-1]
-        
-        # Die beiden am besten platzierten verbliebenen Wildcard-Sieger spielen gegeneinander
         div_match_b_team1 = wc_winners_sorted[0]
         div_match_b_team2 = wc_winners_sorted[1]
 
@@ -182,28 +169,22 @@ def render_playoff_page(user_file):
 
         with btn_col1:
             if st.button("Playoff-Tipps speichern 🏆", use_container_width=True, disabled=is_locked()):
-                # Automatisches Erfassen der Ausstiegs-Runden (15 Pkt Auswertung)
                 playoff_exits = {}
 
                 for conf_title in ["AFC Playoffs", "NFC Playoffs"]:
-                    # Wildcard Verlierer
                     wc1_w = st.session_state.get(f"{conf_title}_wc1")
                     wc2_w = st.session_state.get(f"{conf_title}_wc2")
                     wc3_w = st.session_state.get(f"{conf_title}_wc3")
 
                     seeds = afc_seeds if "AFC" in conf_title else nfc_seeds
                     
-                    # Finde Verlierer der Wildcard Matches
                     for match_pair, winner in [([seeds[2], seeds[7]], wc1_w), ([seeds[3], seeds[6]], wc2_w), ([seeds[4], seeds[5]], wc3_w)]:
                         loser = [t for t in match_pair if t != winner][0]
                         playoff_exits[loser] = "Wild Card"
 
-                    # Divisional Verlierer
                     div1_w = st.session_state.get(f"{conf_title}_div1")
                     div2_w = st.session_state.get(f"{conf_title}_div2")
                     
-                    # Verlierer der Divisional Matches herausfinden
-                    # Match A teams: #1 Seed und wc3_w
                     div_a_pair = [seeds[1], wc3_w]
                     loser_div_a = [t for t in div_a_pair if t != div1_w][0]
                     playoff_exits[loser_div_a] = "Divisional Round"
@@ -212,26 +193,24 @@ def render_playoff_page(user_file):
                     loser_div_b = [t for t in div_b_pair if t != div2_w][0]
                     playoff_exits[loser_div_b] = "Divisional Round"
 
-                    # Conference Finale Verlierer
                     conf_champ = st.session_state.get(f"{conf_title}_final")
                     conf_pair = [div1_w, div2_w]
                     conf_loser = [t for t in conf_pair if t != conf_champ][0]
                     playoff_exits[conf_loser] = "Conference Championship"
 
-                # Super Bowl Verlierer
                 sb_runner_up = afc_finalist if super_bowl_champ == nfc_finalist else nfc_finalist
                 playoff_exits[sb_runner_up] = "Super Bowl Runner-Up"
 
-                # Daten im JSON speichern
+                # Speichern in Google Sheets
                 saved_data["afc_seeds"] = afc_seeds
                 saved_data["nfc_seeds"] = nfc_seeds
                 saved_data["super_bowl_winner"] = super_bowl_champ
                 saved_data["playoff_exits"] = playoff_exits
                 
-                with open(user_file, "w") as f:
-                    json.dump(saved_data, f)
+                save_data(user_key, saved_data)
                 st.balloons()
-                st.success(f"Dein Tipp wurde gespeichert! Super Bowl Champion: {super_bowl_champ}")
+                st.success(f"Dein Tipp wurde dauerhaft in Google Sheets gespeichert! Super Bowl Champion: {super_bowl_champ}")
+
         with btn_col2:
             if is_locked():
                 st.button("Playoff-Tipps zurücksetzen 🗑️", disabled=True, use_container_width=True)
@@ -243,35 +222,30 @@ def render_playoff_page(user_file):
                     reset_bracket = st.checkbox("Playoff Bracket & Super Bowl")
 
                     if st.button("Ausgewähltes löschen ⚠️", type="primary", use_container_width=True):
-                        if os.path.exists(user_file):
-                            with open(user_file, "r") as f:
-                                try:
-                                    file_data = json.load(f)
-                                except Exception:
-                                    file_data = {}
+                        file_data = load_data(user_key)
 
-                            if reset_afc:
-                                file_data.pop("afc_seeds", None)
-                                for pos in range(1, 8):
-                                    key = f"AFC_seed_{pos}"
-                                    if key in st.session_state:
-                                        del st.session_state[key]
+                        if reset_afc:
+                            file_data.pop("afc_seeds", None)
+                            for pos in range(1, 8):
+                                key = f"AFC_seed_{pos}"
+                                if key in st.session_state:
+                                    del st.session_state[key]
 
-                            if reset_nfc:
-                                file_data.pop("nfc_seeds", None)
-                                for pos in range(1, 8):
-                                    key = f"NFC_seed_{pos}"
-                                    if key in st.session_state:
-                                        del st.session_state[key]
+                        if reset_nfc:
+                            file_data.pop("nfc_seeds", None)
+                            for pos in range(1, 8):
+                                key = f"NFC_seed_{pos}"
+                                if key in st.session_state:
+                                    del st.session_state[key]
 
-                            if reset_bracket:
-                                file_data.pop("super_bowl_winner", None)
-                                for key in list(st.session_state.keys()):
-                                    if "Playoffs_" in key or "sb_winner" in key:
-                                        del st.session_state[key]
+                        if reset_bracket:
+                            file_data.pop("super_bowl_winner", None)
+                            file_data.pop("playoff_exits", None)
+                            for key in list(st.session_state.keys()):
+                                if "Playoffs_" in key or "sb_winner" in key:
+                                    del st.session_state[key]
 
-                            with open(user_file, "w") as f:
-                                json.dump(file_data, f)
-
-                            st.success("Ausgewählte Tipps wurden zurückgesetzt!")
-                            st.rerun()
+                        save_data(user_key, file_data)
+                        st.success("Ausgewählte Tipps wurden zurückgesetzt!")
+                        st.rerun()
+                        
