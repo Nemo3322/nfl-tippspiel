@@ -26,11 +26,15 @@ def render_seed_selection(conf_name, divisions_dict, saved_data):
             chosen = [st.session_state.get(f"{conf_name}_seed_{j}") for j in range(1, 5) if j != pos]
             opts = [EMPTY_OPTION] + [t for t in div_winners if t not in chosen]
             
+            # Initialisieren aus Datenbank, falls noch nicht im Session State
+            if key not in st.session_state:
+                saved_val = saved_seeds.get(str(pos), EMPTY_OPTION)
+                st.session_state[key] = saved_val if saved_val in opts else EMPTY_OPTION
+
             curr = st.session_state.get(key)
-            if not curr and str(pos) in saved_seeds:
-                curr = saved_seeds[str(pos)]
             if curr not in opts:
                 curr = EMPTY_OPTION
+                st.session_state[key] = EMPTY_OPTION
 
             idx = opts.index(curr)
             seeds[pos] = st.selectbox(f"Seed #{pos}", options=opts, index=idx, key=key, disabled=is_locked())
@@ -42,11 +46,15 @@ def render_seed_selection(conf_name, divisions_dict, saved_data):
             chosen = [st.session_state.get(f"{conf_name}_seed_{j}") for j in range(5, 8) if j != pos]
             opts = [EMPTY_OPTION] + [t for t in other_teams if t not in chosen]
             
+            # Initialisieren aus Datenbank, falls noch nicht im Session State
+            if key not in st.session_state:
+                saved_val = saved_seeds.get(str(pos), EMPTY_OPTION)
+                st.session_state[key] = saved_val if saved_val in opts else EMPTY_OPTION
+
             curr = st.session_state.get(key)
-            if not curr and str(pos) in saved_seeds:
-                curr = saved_seeds[str(pos)]
             if curr not in opts:
                 curr = EMPTY_OPTION
+                st.session_state[key] = EMPTY_OPTION
 
             idx = opts.index(curr)
             seeds[pos] = st.selectbox(f"Seed #{pos}", options=opts, index=idx, key=key, disabled=is_locked())
@@ -54,7 +62,13 @@ def render_seed_selection(conf_name, divisions_dict, saved_data):
     return seeds
 
 
-def safe_radio(label, options, key_name):
+def safe_radio(label, options, key_name, saved_bracket_picks):
+    # Gespeicherten Sieger wiederherstellen, falls Key noch nicht in session_state existiert
+    if key_name not in st.session_state:
+        saved_val = saved_bracket_picks.get(key_name)
+        if saved_val in options:
+            st.session_state[key_name] = saved_val
+
     curr_val = st.session_state.get(key_name)
     idx_val = options.index(curr_val) if curr_val in options else 0
     return st.radio(label, options=options, index=idx_val, key=key_name, disabled=is_locked())
@@ -68,6 +82,7 @@ def render_playoff_page(username):
 
     user_key = f"tipp_{username}"
     saved_data = load_data(user_key)
+    saved_bracket_picks = saved_data.get("bracket_picks", {})
 
     all_afc_done = all(k in saved_data and isinstance(saved_data[k], list) and len(saved_data[k]) == 4 for k in AFC_DIVISIONS.keys())
     all_nfc_done = all(k in saved_data and isinstance(saved_data[k], list) and len(saved_data[k]) == 4 for k in NFC_DIVISIONS.keys())
@@ -96,6 +111,8 @@ def render_playoff_page(username):
     st.markdown("---")
     st.success("✅ Seeds vollständig! Tippe nun die Playoff-Duelle:")
 
+    bracket_picks = {}
+
     for conf_title, seeds in [("AFC Playoffs", afc_seeds), ("NFC Playoffs", nfc_seeds)]:
         conf_short = "AFC" if "AFC" in conf_title else "NFC"
         
@@ -111,9 +128,17 @@ def render_playoff_page(username):
 
         with col_wc:
             st.markdown("**Wild Card Round**")
-            wc1_winner = safe_radio(f"Match 1: #2 ({seeds[2]}) vs #7 ({seeds[7]})", [seeds[2], seeds[7]], f"{conf_title}_wc1")
-            wc2_winner = safe_radio(f"Match 2: #3 ({seeds[3]}) vs #6 ({seeds[6]})", [seeds[3], seeds[6]], f"{conf_title}_wc2")
-            wc3_winner = safe_radio(f"Match 3: #4 ({seeds[4]}) vs #5 ({seeds[5]})", [seeds[4], seeds[5]], f"{conf_title}_wc3")
+            k_wc1 = f"{conf_title}_wc1"
+            k_wc2 = f"{conf_title}_wc2"
+            k_wc3 = f"{conf_title}_wc3"
+
+            wc1_winner = safe_radio(f"Match 1: #2 ({seeds[2]}) vs #7 ({seeds[7]})", [seeds[2], seeds[7]], k_wc1, saved_bracket_picks)
+            wc2_winner = safe_radio(f"Match 2: #3 ({seeds[3]}) vs #6 ({seeds[6]})", [seeds[3], seeds[6]], k_wc2, saved_bracket_picks)
+            wc3_winner = safe_radio(f"Match 3: #4 ({seeds[4]}) vs #5 ({seeds[5]})", [seeds[4], seeds[5]], k_wc3, saved_bracket_picks)
+
+            bracket_picks[k_wc1] = wc1_winner
+            bracket_picks[k_wc2] = wc2_winner
+            bracket_picks[k_wc3] = wc3_winner
 
         # --- RE-SEEDING LOGIK FÜR DIVISIONAL ROUND ---
         wc_winners = [wc1_winner, wc2_winner, wc3_winner]
@@ -127,34 +152,52 @@ def render_playoff_page(username):
             st.markdown("**Divisional Round**")
             st.info(f"🏆 #1 Seed ({seeds[1]}) Bye-Week")
             
+            k_div1 = f"{conf_title}_div1"
+            k_div2 = f"{conf_title}_div2"
+
             div1_winner = safe_radio(
                 f"Match A: #1 ({seeds[1]}) vs #{team_to_seed[lowest_remaining_seed_team]} ({lowest_remaining_seed_team})", 
                 [seeds[1], lowest_remaining_seed_team], 
-                f"{conf_title}_div1"
+                k_div1,
+                saved_bracket_picks
             )
             div2_winner = safe_radio(
                 f"Match B: #{team_to_seed[div_match_b_team1]} ({div_match_b_team1}) vs #{team_to_seed[div_match_b_team2]} ({div_match_b_team2})", 
                 [div_match_b_team1, div_match_b_team2], 
-                f"{conf_title}_div2"
+                k_div2,
+                saved_bracket_picks
             )
+
+            bracket_picks[k_div1] = div1_winner
+            bracket_picks[k_div2] = div2_winner
 
         with col_conf:
             st.markdown("**Conference Championship**")
-            conf_champ = safe_radio(f"🏆 {conf_title} Finale:", [div1_winner, div2_winner], f"{conf_title}_final")
+            k_final = f"{conf_title}_final"
+            conf_champ = safe_radio(f"🏆 {conf_title} Finale:", [div1_winner, div2_winner], k_final, saved_bracket_picks)
+            bracket_picks[k_final] = conf_champ
             st.success(f"Gewinner: **{conf_champ}**")
 
     st.markdown("---")
     st.subheader("🏈 SUPER BOWL FINALE")
     
-    afc_finalist = st.session_state.get("AFC Playoffs_final")
-    nfc_finalist = st.session_state.get("NFC Playoffs_final")
+    afc_finalist = bracket_picks.get("AFC Playoffs_final")
+    nfc_finalist = bracket_picks.get("NFC Playoffs_final")
 
     if afc_finalist and nfc_finalist:
         sb_opts = [afc_finalist, nfc_finalist]
+        
+        # Super Bowl Gewinner wiederherstellen
+        if "sb_winner_key" not in st.session_state:
+            saved_sb = saved_data.get("super_bowl_winner")
+            if saved_sb in sb_opts:
+                st.session_state["sb_winner_key"] = saved_sb
+
         sb_curr = st.session_state.get("sb_winner_key")
         sb_idx = sb_opts.index(sb_curr) if sb_curr in sb_opts else 0
         
         super_bowl_champ = st.radio("Super Bowl Champion 2026:", options=sb_opts, index=sb_idx, key="sb_winner_key", disabled=is_locked())
+        bracket_picks["sb_winner_key"] = super_bowl_champ
 
         sb_logo_url = TEAM_LOGOS.get(super_bowl_champ)
         if sb_logo_url:
@@ -172,9 +215,9 @@ def render_playoff_page(username):
                 playoff_exits = {}
 
                 for conf_title in ["AFC Playoffs", "NFC Playoffs"]:
-                    wc1_w = st.session_state.get(f"{conf_title}_wc1")
-                    wc2_w = st.session_state.get(f"{conf_title}_wc2")
-                    wc3_w = st.session_state.get(f"{conf_title}_wc3")
+                    wc1_w = bracket_picks[f"{conf_title}_wc1"]
+                    wc2_w = bracket_picks[f"{conf_title}_wc2"]
+                    wc3_w = bracket_picks[f"{conf_title}_wc3"]
 
                     seeds = afc_seeds if "AFC" in conf_title else nfc_seeds
                     
@@ -182,34 +225,39 @@ def render_playoff_page(username):
                         loser = [t for t in match_pair if t != winner][0]
                         playoff_exits[loser] = "Wild Card"
 
-                    div1_w = st.session_state.get(f"{conf_title}_div1")
-                    div2_w = st.session_state.get(f"{conf_title}_div2")
+                    div1_w = bracket_picks[f"{conf_title}_div1"]
+                    div2_w = bracket_picks[f"{conf_title}_div2"]
                     
-                    div_a_pair = [seeds[1], wc3_w]
+                    # Wildcard-Sieger ermitteln
+                    wc_w_sorted = sorted([wc1_w, wc2_w, wc3_w], key=lambda t: {team: s for s, team in seeds.items()}.get(t, 99))
+                    lowest_seed_t = wc_w_sorted[-1]
+                    
+                    div_a_pair = [seeds[1], lowest_seed_t]
                     loser_div_a = [t for t in div_a_pair if t != div1_w][0]
                     playoff_exits[loser_div_a] = "Divisional Round"
 
-                    div_b_pair = [wc1_w, wc2_w]
+                    div_b_pair = [wc_w_sorted[0], wc_w_sorted[1]]
                     loser_div_b = [t for t in div_b_pair if t != div2_w][0]
                     playoff_exits[loser_div_b] = "Divisional Round"
 
-                    conf_champ = st.session_state.get(f"{conf_title}_final")
+                    conf_champ_picked = bracket_picks[f"{conf_title}_final"]
                     conf_pair = [div1_w, div2_w]
-                    conf_loser = [t for t in conf_pair if t != conf_champ][0]
+                    conf_loser = [t for t in conf_pair if t != conf_champ_picked][0]
                     playoff_exits[conf_loser] = "Conference Championship"
 
                 sb_runner_up = afc_finalist if super_bowl_champ == nfc_finalist else nfc_finalist
                 playoff_exits[sb_runner_up] = "Super Bowl Runner-Up"
 
-                # Speichern in Google Sheets
+                # Alles dauerhaft in Google Sheets speichern
                 saved_data["afc_seeds"] = afc_seeds
                 saved_data["nfc_seeds"] = nfc_seeds
                 saved_data["super_bowl_winner"] = super_bowl_champ
                 saved_data["playoff_exits"] = playoff_exits
+                saved_data["bracket_picks"] = bracket_picks
                 
                 save_data(user_key, saved_data)
                 st.balloons()
-                st.success(f"Dein Tipp wurde erfolgreich gespeichert! Super Bowl Champion: {super_bowl_champ}")
+                st.success(f"Dein Bracket wurde dauerhaft gespeichert! Super Bowl Champion: {super_bowl_champ}")
 
         with btn_col2:
             if is_locked():
@@ -241,6 +289,7 @@ def render_playoff_page(username):
                         if reset_bracket:
                             file_data.pop("super_bowl_winner", None)
                             file_data.pop("playoff_exits", None)
+                            file_data.pop("bracket_picks", None)
                             for key in list(st.session_state.keys()):
                                 if "Playoffs_" in key or "sb_winner" in key:
                                     del st.session_state[key]
@@ -248,4 +297,3 @@ def render_playoff_page(username):
                         save_data(user_key, file_data)
                         st.success("Ausgewählte Tipps wurden zurückgesetzt!")
                         st.rerun()
-                        
